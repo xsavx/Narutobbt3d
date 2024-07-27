@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Display GLB File with Orbit Controls and Texture</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
+    <script>
+        let scene, camera, renderer, controls;
+
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+
+            scene.background = new THREE.Color(0xcccccc);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000);
+            camera.position.set(0, 0, 4);
+            camera.fov = 50; // Field of view
+            camera.updateProjectionMatrix();
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Orbit Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.minDistance = 2.8; // Set the minimum distance to prevent zooming in too close
+            controls.maxDistance = 20; // Optional: Set a maximum distance to prevent zooming out too far
+
+            // Light
+            const light = new THREE.DirectionalLight(0xC0C0C0, 0.5); // Reduced intensity from 1 to 0.5
+            scene.add(light);
+
+            function createDirectionalLight(color, intensity, position) {
+                const light = new THREE.DirectionalLight(color, intensity);
+                light.position.set(position.x, position.y, position.z);
+                scene.add(light);
+                return light;
+            }
+
+            createDirectionalLight(0xffffff, 2, new THREE.Vector3(5, 0, 0)); 
+            createDirectionalLight(0xffffff, 2, new THREE.Vector3(-5, 0, 0)); 
+            createDirectionalLight(0xffffff, 2, new THREE.Vector3(0, 0, -5)); 
+            createDirectionalLight(0xffffff, 2, new THREE.Vector3(0, 0, 5)); 
+            createDirectionalLight(0xffffff, 0.2, new THREE.Vector3(0, -5, 0)); 
+            createDirectionalLight(0xffffff, 0.1, new THREE.Vector3(2.5, 0, 2.5)); 
+            createDirectionalLight(0xffffff, 0.1, new THREE.Vector3(-2.5, 0, 2.5)); 
+            createDirectionalLight(0xffffff, 0.1, new THREE.Vector3(2.5, 0, -2.5)); 
+            createDirectionalLight(0xffffff, 0.1, new THREE.Vector3(-2.5, 0, -2.5)); 
+
+            // Load GLB model
+            const loader = new THREE.GLTFLoader();
+
+            // Configure DRACOLoader
+            const dracoLoader = new THREE.DRACOLoader();
+            dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
+            loader.setDRACOLoader(dracoLoader);
+
+            loader.load('mbt1.glb', function (gltf) {
+                scene.add(gltf.scene);
+                applyTexture(gltf.scene, 'NARUTO.png'); // Apply texture to the model
+                gltf.scene.position.y = -1.6; // Position the model lower
+                animate();
+            }, undefined, function (error) {
+                console.error(error);
+            });
+
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            controls.update(); // only required if controls.enableDamping = true, or if controls.autoRotate = true
+
+            renderer.render(scene, camera);
+        }
+
+        function applyTexture(model, texturePath) {
+    const textureLoader = new THREE.TextureLoader();
+    textureLoader.load(texturePath, function (texture) {
+        texture.flipY = false; // Prevent the texture from being flipped vertically
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.minFilter = THREE.LinearMipMapLinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+
+        // Anisotropic filtering
+        const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+        texture.anisotropy = maxAnisotropy;
+
+        // Adjust the repeat value to ensure the texture covers the model properly
+        texture.repeat.set(1.1, 1.671); // Increase x-axis repeat slightly
+
+        model.traverse(function (child) {
+            if (child.isMesh && child.name === 'cover') { // Adjust the condition based on actual names
+                child.material.map = texture;
+                child.material.needsUpdate = true;
+
+                // Adjust UV mapping to align the texture
+                const uvAttribute = child.geometry.attributes.uv;
+                for (let i = 0; i < uvAttribute.count; i++) {
+                    const uv = uvAttribute.array;
+                    uv[i * 2] = uv[i * 2] - 0.0475; // Translate x-axis UVs to the right by 0.07
+                    uv[i * 2 + 1] = uv[i * 2 + 1] * 1.05- 0.009; // Scale y-axis UVs by 0.8 and then translate down by 0.1
+
+                    // Ensure UV wrapping for both x and y axes
+                    if (uv[i * 2] > 1) uv[i * 2] -= 0.991;
+                    // if (uv[i * 2 + 1] > 1) uv[i * 2 + 1] -= 2; // Ensure UV wrapping
+                }
+                uvAttribute.needsUpdate = true;
+
+                child.visible = true;
+            }
+            if (child.isMesh && child.name === 'Circle') {
+                const material = new THREE.MeshStandardMaterial({
+                    color: 0xC0C0C0,
+                    metalness: 1.0,
+                    roughness: 0.2,
+                    envMapIntensity: 1.0,
+                });
+
+                
+
+                child.material = material;
+            }
+        });
+    }, undefined, function (error) {
+        console.error(error);
+    });
+}
+
+
+        init();
+    </script>
+</body>
+</html>
